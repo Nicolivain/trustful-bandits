@@ -1,8 +1,8 @@
 import numpy as np
 
 
-class RandomAgent:
-    def __init__(self, capital, p_buy=0.15, p_sell=0.15, volume=0.1):
+class Agent:
+    def __init__(self, capital):
         self.capital = capital
         self.cash = capital
         self.asset = 0
@@ -10,6 +10,23 @@ class RandomAgent:
         self.current_pnl = capital
         self.previous_pnl = 0
 
+    def calc_pnl(self, bid):
+        self.previous_pnl = self.current_pnl
+        self.current_pnl = self.cash + self.asset * bid - self.capital
+        return self.current_pnl
+
+    def rescale_capital(self, frac):
+        self.current_pnl *= frac
+        self.previous_pnl *= frac
+        self.capital *= frac
+        self.cash *= frac
+        self.asset *= frac
+    
+
+
+class RandomAgent(Agent):
+    def __init__(self, capital, p_buy=0.15, p_sell=0.15, volume=0.1):
+        super().__init__(capital)
         self.p_sell = p_sell
         self.p_buy = p_buy
         self.volume = volume
@@ -27,28 +44,11 @@ class RandomAgent:
             self.asset -= self.asset
         else:
             pass
-    
-    def calc_pnl(self, bid):
-        self.previous_pnl = self.current_pnl
-        self.current_pnl = self.cash + self.asset * bid - self.capital
-        return self.current_pnl
-
-    def rescale_capital(self, frac):
-        self.current_pnl *= frac
-        self.previous_pnl *= frac
-        self.capital *= frac
-        self.cash *= frac
-        self.asset *= frac
 
 
-class ExpAvgAgent:
+class ExpAvgAgent(Agent):
     def __init__(self, capital, alpha=0.8, volume=0.1):
-        self.capital = capital
-        self.cash = capital
-        self.asset = 0
-
-        self.current_pnl = capital
-        self.previous_pnl = 0
+        super().__init__(capital)
 
         self.alpha = alpha
         self.ma_bid = 0
@@ -73,15 +73,34 @@ class ExpAvgAgent:
             # else we move on
             pass
 
-    def calc_pnl(self, bid):
-        self.previous_pnl = self.current_pnl
-        self.current_pnl = self.cash + self.asset * bid - self.capital
-        return self.current_pnl
+class PwAgent(Agent):
+    def __init__(self, capital, streak=3, volume=0.1):
+        super().__init__(capital)
+        self.last_bid = 0
+        self.last_ask = 0
+        self.b_streak = 0
+        self.a_streak = 0
+        self.action_streak = streak
+        self.volume = volume
 
-    def rescale_capital(self, frac):
-        self.current_pnl *= frac
-        self.previous_pnl *= frac
-        self.capital *= frac
-        self.cash *= frac
-        self.asset *= frac
+    def act(self, bid, ask):
+        if bid >= self.last_bid: self.b_streak += 1
+        else: self.b_streak = 0
+        if ask <= self.last_ask: self.a_streak += 1
+        else: self.a_streak = 0
 
+        self.last_ask = ask
+        self.last_bid = bid
+
+        if self.a_streak >= self.action_streak:
+            # we buy if price is below the moving average
+            c = min(self.cash, self.volume * self.capital)
+            self.cash -= c
+            self.asset += c / ask
+            self.a_streak = 0
+        if self.b_streak >= self.action_streak:
+            # we sell if price is above the moving average
+            c = min(self.volume * self.capital / bid, self.asset)
+            self.cash += bid * c
+            self.asset -= self.asset 
+            self.b_streak = 0
