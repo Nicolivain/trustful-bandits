@@ -20,8 +20,7 @@ class Agent:
         self.previous_pnl *= frac
         self.capital *= frac
         self.cash *= frac
-        self.asset *= frac
-    
+        self.asset *= frac    
 
 
 class RandomAgent(Agent):
