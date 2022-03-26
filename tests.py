@@ -4,3 +4,10 @@ def test_pnl_increase(agent):
         return 1
     else:
         return 0
+
+
+def test_highest_pnl(agent_a, agent_b):
+    if agent_a.current_pnl > agent_b.current_pnl:
+        return 1
+    else:
+        return 0

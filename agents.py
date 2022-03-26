@@ -66,13 +66,13 @@ class MMAgent(Agent):
         self.calc_limit_orders(bid, ask)
 
         if bid <= self.bid_order_price:
-            print(self.bid_order_price, self.bid_order_vol)
+            #print(self.bid_order_price, self.bid_order_vol)
             self.cash -= min(self.bid_order_price * self.bid_order_vol, self.cash)
             self.asset += min(self.bid_order_vol, self.cash / bid)  # make sure we don't go negative in cash
             self.bid_order_price, self.bid_order_vol = None, None
             self.cpt_a = 0
         else:
-            self.cpt_b+=1
+            self.cpt_b += 1
 
         if ask >= self.ask_order_price:
             self.cash += self.ask_order_price * self.ask_order_vol
@@ -80,12 +80,14 @@ class MMAgent(Agent):
             self.ask_order_price, self.ask_order_vol = None, None
             self.cpt_b = 0
         else:
-            self.cpt_b+=1
+            self.cpt_a += 1
 
         if self.cpt_b>=self.patience:
             self.bid_order_price, self.bid_order_vol = None, None
+            self.cpt_b = 0
         if self.cpt_a>=self.patience:
             self.ask_order_price, self.ask_order_vol = None, None
+            self.cpt_a = 0
 
     def calc_limit_orders(self, bid, ask):
         pass
@@ -98,10 +100,10 @@ class StaticMMAgent(MMAgent):
         self.dask = dask
 
     def calc_limit_orders(self, bid, ask):
-        self.ask_order_price = ask + self.dask if self.ask_order_price is None else self.ask_order_price
+        self.ask_order_price = ask + self.dask * self.tick_size if self.ask_order_price is None else self.ask_order_price
         self.ask_order_vol = self.volume if self.ask_order_vol is None else self.ask_order_vol
 
-        self.bid_order_price = bid - self.dbid if self.bid_order_price is None else self.bid_order_price
+        self.bid_order_price = bid - self.dbid * self.tick_size if self.bid_order_price is None else self.bid_order_price
         self.bid_order_vol = self.volume if self.bid_order_vol is None else self.bid_order_vol
 
 
