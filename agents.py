@@ -45,75 +45,116 @@ class RandomAgent(Agent):
             pass
 
 
-class StaticMMAgent(Agent): 
-    def __init__(self, capital, dbid, dask, tick_size, volume=100):
+class MMAgent(Agent):
+    def __init__(self, capital, tick_size, volume=100, patience=15):
         super().__init__(capital)
 
         self.tick_size = tick_size
+        self.volume = volume
+
+        self.cpt_a = 0
+        self.cpt_b = 0
+        self.patience = patience
+
+        self.ask_order_price = None 
+        self.ask_order_vol = None
+
+        self.bid_order_price = None
+        self.bid_order_vol = None
+
+    def act(self, bid, ask):
+        self.calc_limit_orders(bid, ask)
+
+        if bid <= self.bid_order_price:
+            print(self.bid_order_price, self.bid_order_vol)
+            self.cash -= min(self.bid_order_price * self.bid_order_vol, self.cash)
+            self.asset += min(self.bid_order_vol, self.cash / bid)  # make sure we don't go negative in cash
+            self.bid_order_price, self.bid_order_vol = None, None
+            self.cpt_a = 0
+        else:
+            self.cpt_b+=1
+
+        if ask >= self.ask_order_price:
+            self.cash += self.ask_order_price * self.ask_order_vol
+            self.asset -= self.ask_order_vol
+            self.ask_order_price, self.ask_order_vol = None, None
+            self.cpt_b = 0
+        else:
+            self.cpt_b+=1
+
+        if self.cpt_b>=self.patience:
+            self.bid_order_price, self.bid_order_vol = None, None
+        if self.cpt_a>=self.patience:
+            self.ask_order_price, self.ask_order_vol = None, None
+
+    def calc_limit_orders(self, bid, ask):
+        pass
+        
+
+class StaticMMAgent(MMAgent): 
+    def __init__(self, capital, dbid, dask, tick_size, volume=100,patience=15):
+        super().__init__(capital, tick_size, volume, patience)
         self.dbid = dbid
         self.dask = dask
 
-        self.ask_order_price = None 
-        self.ask_order_vol = None
-
-        self.bid_order_price = None
-        self.bid_order_vol = None
-
-        self.volume= volume
-
-    def act(self, bid, ask):
+    def calc_limit_orders(self, bid, ask):
         self.ask_order_price = ask + self.dask if self.ask_order_price is None else self.ask_order_price
         self.ask_order_vol = self.volume if self.ask_order_vol is None else self.ask_order_vol
 
-        self.bid_order_price = bid + self.dbid if self.bid_order_price is None else self.bid_order_price
-        self.bid_order_bid = self.volume if self.bid_order_vol is None else self.bid_order_vol
-
-        if bid <= self.bid_order_price:
-            self.cash -= min(self.bid_order_price * self.bid_order_vol, self.cash)
-            self.asset += min(self.bid_order_vol, self.cash / bid)  # make sure we don't go negative in cash
-            self.bid_order_price, self.bid_order_vol = None, None
-        if ask >= self.ask_order_price:
-            self.cash += self.ask_order_price * self.ask_order_vol
-            self.asset -= self.ask_order_vol
-            self.ask_order_price, self.ask_order_vol = None, None
+        self.bid_order_price = bid - self.dbid if self.bid_order_price is None else self.bid_order_price
+        self.bid_order_vol = self.volume if self.bid_order_vol is None else self.bid_order_vol
 
 
-class DynamicMMAgent(Agent): 
-    def __init__(self, capital, cbid, cask, tick_size, volume=100):
-        super().__init__(capital)
+class DynamicMMAgent(MMAgent): 
+    def __init__(self, capital, cbid, cask, tick_size, volume=100, patience=15):
+        super().__init__(capital, tick_size, volume, patience)
 
-        self.tick_size = tick_size
         self.cbid = cbid
         self.cask = cask
 
-        self.ask_order_price = None 
-        self.ask_order_vol = None
+        self.sigma_ask = 0
+        self.avg_ask = 0
+        self.sigma_bid = 0
+        self.avg_bid = 0
 
-        self.bid_order_price = None
-        self.bid_order_vol = None
+        self.old_ask = None
+        self.old_bid = None
 
-        self.volume= volume
+        self.cpt = 0
 
-    def act(self, bid, ask):
-        vol = self.calc_vol()
-        self.ask_order_price = ask + self.cask * vol if self.ask_order_price is None else self.ask_order_price
+    def calc_limit_orders(self, bid, ask):
+        self.calc_volatility(bid, ask)
+
+        self.ask_order_price = ask + self.cask * self.sigma_ask if self.ask_order_price is None else self.ask_order_price
         self.ask_order_vol = self.volume if self.ask_order_vol is None else self.ask_order_vol
 
-        self.bid_order_price = bid + self.cbid * vol if self.bid_order_price is None else self.bid_order_price
-        self.bid_order_bid = self.volume if self.bid_order_vol is None else self.bid_order_vol
+        self.bid_order_price = bid - self.cbid * self.sigma_bid if self.bid_order_price is None else self.bid_order_price
+        self.bid_order_vol = self.volume if self.bid_order_vol is None else self.bid_order_vol
 
-        if bid <= self.bid_order_price:
-            self.cash -= min(self.bid_order_price * self.bid_order_vol, self.cash)
-            self.asset += min(self.bid_order_vol, self.cash / bid)  # make sure we don't go negative in cash
-            self.bid_order_price, self.bid_order_vol = None, None
-        if ask >= self.ask_order_price:
-            self.cash += self.ask_order_price * self.ask_order_vol
-            self.asset -= self.ask_order_vol
-            self.ask_order_price, self.ask_order_vol = None, None
+    def calc_volatility(self, bid, ask):
+        self.cpt += 1
 
-    def calc_vol():
-        pass
+        if self.old_ask is not None:
+            xa = ask - self.old_ask
+            xb = bid - self.old_bid
+            self.old_ask = ask
+            self.old_bid = bid
+        else:
+            self.old_ask = ask
+            self.old_bid = bid
+            return 0
 
+        old_avg_ask = self.avg_ask
+        self.avg_ask = (self.cpt-1) / self.cpt * self.avg_ask + 1 / self.cpt * xa 
+        old_avg_bid = self.avg_bid
+        self.avg_bid = (self.cpt-1) / self.cpt * self.avg_bid + 1 / self.cpt * xb 
+
+        self.sigma_ask = self.sigma_ask**2 + old_avg_ask**2 - self.avg_ask**2 + (xa**2 - self.sigma_ask**2 - old_avg_ask**2) / self.cpt   
+        self.sigma_ask = self.sigma_ask ** (1/2)     
+
+        self.sigma_bid = self.sigma_bid**2 + old_avg_bid**2 - self.avg_bid**2 + (xb**2 - self.sigma_bid**2 - old_avg_bid**2) / self.cpt   
+        self.sigma_bid = self.sigma_bid ** (1/2)   
+ 
 
 class ExpAvgAgent(Agent):
     def __init__(self, capital, alpha=0.8, volume=0.1):
