@@ -4,7 +4,7 @@ We tackle here the problem of the two armed bandit from a stochastic algorithm s
 We also provide a comprehensive mathematical summary of the two main reference, proving the speed and the convergence of the used algorithm.
 
 
-![](data/speed.png)
+![](data/speed.jpg)
 
 
 Here, we try to match the theoritical results achieved in the paper, apply them with real data and finally try to extend it to a multi-agent setup  
